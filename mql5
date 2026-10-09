@@ -1,0 +1,95 @@
+//+------------------------------------------------------------------+
+//| ForexRobot.mq5                                                   |
+//| Initial MT5 Forex Robot                                          |
+//+------------------------------------------------------------------+
+#property strict
+#property version "1.00"
+#property description "Forex analysis robot with risk-first design"
+
+#include <Trade/Trade.mqh>
+
+input ENUM_TIMEFRAMES SignalTimeframe = PERIOD_M15;
+input int FastMAPeriod = 20;
+input int SlowMAPeriod = 50;
+
+int FastMAHandle = INVALID_HANDLE;
+int SlowMAHandle = INVALID_HANDLE;
+
+datetime LastBarTime = 0;
+
+int OnInit()
+{
+   if(FastMAPeriod <= 0 ||
+      SlowMAPeriod <= 0 ||
+      FastMAPeriod >= SlowMAPeriod)
+   {
+      Print("Invalid moving average settings.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   FastMAHandle = iMA(
+      _Symbol, SignalTimeframe,
+      FastMAPeriod, 0, MODE_EMA, PRICE_CLOSE
+   );
+
+   SlowMAHandle = iMA(
+      _Symbol, SignalTimeframe,
+      SlowMAPeriod, 0, MODE_EMA, PRICE_CLOSE
+   );
+
+   if(FastMAHandle == INVALID_HANDLE ||
+      SlowMAHandle == INVALID_HANDLE)
+   {
+      Print("Failed to initialize indicators.");
+      return INIT_FAILED;
+   }
+
+   Print("ForexRobot initialized. Signal-only mode.");
+   return INIT_SUCCEEDED;
+}
+
+void OnDeinit(const int reason)
+{
+   if(FastMAHandle != INVALID_HANDLE)
+      IndicatorRelease(FastMAHandle);
+
+   if(SlowMAHandle != INVALID_HANDLE)
+      IndicatorRelease(SlowMAHandle);
+}
+
+void OnTick()
+{
+   datetime barTime = iTime(
+      _Symbol, SignalTimeframe, 0
+   );
+
+   if(barTime == 0 || barTime == LastBarTime)
+      return;
+
+   LastBarTime = barTime;
+
+   double fastMA[1];
+   double slowMA[1];
+
+   // Read the last fully closed candle.
+   if(CopyBuffer(FastMAHandle, 0, 1, 1, fastMA) != 1)
+      return;
+
+   if(CopyBuffer(SlowMAHandle, 0, 1, 1, slowMA) != 1)
+      return;
+
+   if(fastMA[0] > slowMA[0])
+   {
+      Print("BUY BIAS: ", _Symbol,
+            " | Timeframe: ", EnumToString(SignalTimeframe));
+   }
+   else if(fastMA[0] < slowMA[0])
+   {
+      Print("SELL BIAS: ", _Symbol,
+            " | Timeframe: ", EnumToString(SignalTimeframe));
+   }
+   else
+   {
+      Print("NO TRADE: Moving averages are equal.");
+   }
+}
